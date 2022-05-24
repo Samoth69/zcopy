@@ -32,7 +32,7 @@ namespace zcopy
             copyCompleteCallback = completeCallback;
         }
 
-        public void Start()
+        public async void Start()
         {
             while (!done)
             {
@@ -72,7 +72,7 @@ namespace zcopy
                             else
                                 srcFi = (FileInfo)file.SrcFileSystemInfo;
 
-                            CopyWithProgress(file);
+                            await CopyWithProgress(file);
 
                             File.SetAttributes(file.Dest, srcFi.Attributes);
                             File.SetCreationTimeUtc(file.Dest, srcFi.CreationTimeUtc);
@@ -81,7 +81,7 @@ namespace zcopy
                         }
                         catch (Exception ex)
                         {
-                            Task.Run(() => copyErrorCallback.Invoke(file, ex.Message));
+                            await Task.Run(() => copyErrorCallback.Invoke(file, ex.Message));
                         }
                     }
                 }
@@ -91,43 +91,87 @@ namespace zcopy
 
         /// <summary>
         /// Copy file, overwrite existing file
-        /// see https://gist.github.com/szunyog/52390c6f8a61615dfc01
-        /// and https://stackoverflow.com/a/1247042/9658535
+        /// see (basic idea) https://gist.github.com/szunyog/52390c6f8a61615dfc01
+        /// and (optimizing filestream) https://stackoverflow.com/a/1247042/9658535
+        /// and (async copy) https://stackoverflow.com/a/4139427/9658535
         /// </summary>
         /// <param name="src">source file absolute path</param>
         /// <param name="dest">destination file absolute path</param>
-        private void CopyWithProgress(FileCouple fi)
+        private async Task CopyWithProgress(FileCouple fi)
         {
             try
             {
                 int bufferSize = 1024 * 64;
-                using (FileStream inStream = new FileStream(fi.Src, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan))
-                using (FileStream fileStream = new FileStream(fi.Dest, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write, bufferSize, FileOptions.SequentialScan))
+
+                using (FileStream inStream = new FileStream(fi.Src, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan & FileOptions.Asynchronous))
+                using (FileStream outStream = new FileStream(fi.Dest, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write, bufferSize, FileOptions.SequentialScan & FileOptions.Asynchronous))
                 {
-                    int bytesRead = -1;
-                    long totalReads = 0;
-                    long totalBytes = inStream.Length;
-                    byte[] bytes = new byte[bufferSize];
+                    long totalFileSize = inStream.Length;
+                    long copiedSize = 0;
                     int prevPercent = 0;
 
-                    while ((bytesRead = inStream.Read(bytes, 0, bufferSize)) > 0)
+                    byte[][] buf = { new byte[bufferSize], new byte[bufferSize] };
+                    int[] bufl = { 0, 0 };
+                    int bufno = 0;
+                    Task<int> read = inStream.ReadAsync(buf[bufno], 0, buf[bufno].Length);
+                    Task? write = null;
+
+                    while (true)
                     {
-                        fileStream.Write(bytes, 0, bytesRead);
-                        totalReads += bytesRead;
-                        int percent = System.Convert.ToInt32(totalReads / (decimal)totalBytes * 100);
+                        await read;
+                        bufl[bufno] = read.Result;
+
+                        // if zero bytes read, the copy is complete
+                        if (bufl[bufno] == 0)
+                        {
+                            break;
+                        }
+
+                        // wait for the in-flight write operation, if one exists, to complete
+                        // the only time one won't exist is after the very first read operation completes
+                        if (write != null)
+                        {
+                            await write;
+                        }
+
+                        // start the new write operation
+                        write = outStream.WriteAsync(buf[bufno], 0, bufl[bufno]);
+
+                        // on ajoute la quantité de données copié dans le compteur
+                        copiedSize += bufl[bufno];
+                        int percent = (int)(copiedSize / (decimal)totalFileSize * 100);
                         if (percent != prevPercent)
                         {
                             //send update info, we don't data back
-                            Task.Run(() => copyProgressCallback.Invoke(fi, percent));
+                            await Task.Run(() => copyProgressCallback.Invoke(fi, percent));
                             prevPercent = percent;
                         }
+
+                        // toggle the current, in-use buffer
+                        // and start the read operation on the new buffer.
+                        //
+                        // Changed to use XOR to toggle between 0 and 1.
+                        // A little speedier than using a ternary expression.
+                        bufno ^= 1; // bufno = ( bufno == 0 ? 1 : 0 ) ;
+                        read = inStream.ReadAsync(buf[bufno], 0, buf[bufno].Length);
+
                     }
+
+                    // wait for the final in-flight write operation, if one exists, to complete
+                    // the only time one won't exist is if the input stream is empty.
+                    if (write != null)
+                    {
+                        await write;
+                    }
+
+                    outStream.Flush();
+
                 }
-                Task.Run(() => copyCompleteCallback.Invoke(fi));
+                await Task.Run(() => copyCompleteCallback.Invoke(fi));
             }
             catch (Exception ex)
             {
-                Task.Run(() => copyErrorCallback.Invoke(fi, ex.Message));
+                await Task.Run(() => copyErrorCallback.Invoke(fi, ex.Message));
             }
         }
 
