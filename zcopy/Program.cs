@@ -9,14 +9,7 @@ namespace zcopy
         // if == 1, increase log from the app
         private static byte verbose = 0;
 
-        private static ulong ScannerError = 0;
-        private static ulong CopierError = 0;
-        private static ulong Copied = 0;
-        private static ulong Skipped = 0;
-        private static string ScreenCurrentFile = "";
-        private static int ScreenPercent = 0;
-
-        private static Stopwatch ExecTime = new();
+        private static Screen screen = new();
 
         static int Main(string[] args)
         {
@@ -175,9 +168,7 @@ namespace zcopy
 
             Thread scannerThread = new Thread(new ThreadStart(scanner.Start));
             Thread copyThread = new Thread(new ThreadStart(copier.Start));
-            Thread screenThread = new Thread(new ThreadStart(StartScreenUpdateThread));
-
-            ExecTime.Start();
+            Thread screenThread = new Thread(new ThreadStart(screen.Start));
 
             WriteLineLog("Starting Scanner thread");
             scannerThread.Start();
@@ -193,32 +184,31 @@ namespace zcopy
 
             //notify copier to stop main loop
             copier.Stop();
-            StopScreenThread();
+
+            screen.Stop();
 
             copyThread.Join();
             WriteLineLog("Copy Thread exited");
 
-            ExecTime.Stop();
-
-            WriteLineLog($"ExecTime: {ExecTime.Elapsed}");
-            WriteLineLog($"ScannerError: {ScannerError}");
-            WriteLineLog($"CopierError: {CopierError}");
-            WriteLineLog($"Copied: {Copied}");
-            WriteLineLog($"Skipped: {Skipped}");
+            WriteLineLog($"ExecTime: {screen.GetElaspedTime}");
+            WriteLineLog($"ScannerError: {screen.ScannerError}");
+            WriteLineLog($"CopierError: {screen.CopierError}");
+            WriteLineLog($"Copied: {screen.Copied}");
+            WriteLineLog($"Skipped: {screen.Skipped}");
         }
 
         private static void ScannerErrorCallback(string file, string err)
         {
-            ScannerError++;
+            screen.ScannerError++;
             WriteLineLog($"Err Scanner: {file} {err}");
-            ScreenCurrentFile = file;
+            screen.ScreenScanningFile = file;
         }
 
         private static void ScannerSkippedCallback(string file)
         {
-            Skipped++;
+            screen.Skipped++;
             WriteLineLog($"Scanner: skipped {file}");
-            ScreenCurrentFile = file;
+            screen.ScreenScanningFile = file;
         }
 
         private static void CopierProgressCallback(FileCouple fi, int percent)
@@ -228,22 +218,24 @@ namespace zcopy
                 Console.SetCursorPosition(0, Console.CursorTop);
                 WriteLog($"Copy: {percent}% {fi.Src}");
             }
-            ScreenCurrentFile = fi.Src;
-            ScreenPercent = percent;
+            screen.ScreenCopyFile = fi.Src;
+            screen.ScreenPercent = percent;
         }
 
         private static void CopierErrorCallback(FileCouple fi, string err)
         {
-            CopierError++;
+            screen.CopierError++;
             WriteLineLog($"Err Copier: {fi.Src} {err}");
-            ScreenCurrentFile = fi.Src;
+            screen.ScreenCopyFile = fi.Src;
+            screen.ScreenPercent = null;
         }
 
         private static void CopierCompleteCallback(FileCouple fi)
         {
-            Copied++;
+            screen.Copied++;
             WriteLineLog("");
-            ScreenCurrentFile = fi.Src;
+            screen.ScreenCopyFile = fi.Src;
+            screen.ScreenPercent = null;
         }
 
         /// <summary>
@@ -264,90 +256,6 @@ namespace zcopy
             {
                 Console.Write(text);
             }
-        }
-
-        private static bool KeepScreenUpdateOn = true;
-
-        private static void StartScreenUpdateThread()
-        {
-            while (KeepScreenUpdateOn)
-            {
-                UpdateScreen(ScreenCurrentFile, ScreenPercent);
-                Thread.Sleep(100);
-            }
-        }
-
-        private static void StopScreenThread()
-        {
-            KeepScreenUpdateOn = false;
-        }
-
-        private static int OldFileNameSize = 0;
-
-        /// <summary>
-        /// Print copy status, do not print if verbose is on
-        /// </summary>
-        /// <param name="srcFile"></param>
-        /// <param name="destFile"></param>
-        /// <param name="progress"></param>
-        private static void UpdateScreen(string srcFile, int? progress = null)
-        {
-            if (verbose == 1)
-            {
-                return;
-            }
-
-            Console.SetCursorPosition(0, 0);
-
-            if (OldFileNameSize != 0 && OldFileNameSize > srcFile.Length)
-            {
-                Console.Clear();
-            }
-
-            string displayFiName = srcFile;
-            if (displayFiName.Length > Console.WindowWidth - 6)
-            {
-                displayFiName = displayFiName.Substring(0, Console.WindowWidth - 6);
-            }
-
-            ConsoleWriteLineWithColor($"file: {displayFiName}", ConsoleColor.Gray);
-            if (progress != null)
-                ConsoleWriteNumberWithSpColor("Progress: ", progress, " %", ConsoleColor.White, ConsoleColor.Gray);
-
-            Console.WriteLine();
-            ConsoleWriteNumberWithSpColor("Running: ", ExecTime.Elapsed.ToString("d\\.hh\\:mm\\:ss"), null, ConsoleColor.White, ConsoleColor.Gray);
-            ConsoleWriteNumberWithSpColor("Copied: ", Copied, null, ConsoleColor.Green, ConsoleColor.Gray);
-            ConsoleWriteNumberWithSpColor("Skipped: ", Skipped, null, ConsoleColor.DarkGreen, ConsoleColor.Gray);
-            ConsoleWriteNumberWithSpColor("Scanner Error: ", ScannerError, null, ConsoleColor.DarkRed, ConsoleColor.Gray);
-            ConsoleWriteNumberWithSpColor("Copier Error: ", CopierError, null, ConsoleColor.DarkRed, ConsoleColor.Gray);
-
-            OldFileNameSize = displayFiName.Length;
-        }
-
-        private static void ConsoleWriteNumberWithSpColor(string? header, object value, string? footer, ConsoleColor accent, ConsoleColor textColor = ConsoleColor.White)
-        {
-            if (header != null)
-                ConsoleWriteWithColor(header, textColor);
-
-            ConsoleWriteWithColor(value, accent);
-
-            if (footer != null)
-                ConsoleWriteWithColor(footer, textColor);
-
-            Console.WriteLine();
-        }
-
-        private static void ConsoleWriteWithColor(object text, ConsoleColor col)
-        {
-            Console.ForegroundColor = col;
-            Console.Write(text);
-            Console.ResetColor();
-        }
-
-        private static void ConsoleWriteLineWithColor(object text, ConsoleColor col)
-        {
-            ConsoleWriteWithColor(text, col);
-            Console.WriteLine();
-        }
+        }        
     }
 }
