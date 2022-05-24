@@ -101,7 +101,7 @@ namespace zcopy
         {
             try
             {
-                int bufferSize = 1024 * 64;
+                int bufferSize = 1024 * 512;
 
                 using (FileStream inStream = new FileStream(fi.Src, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan & FileOptions.Asynchronous))
                 using (FileStream outStream = new FileStream(fi.Dest, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write, bufferSize, FileOptions.SequentialScan & FileOptions.Asynchronous))

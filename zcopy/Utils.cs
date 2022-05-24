@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace zcopy
 {
-    internal class Utils
+    internal static class Utils
     {
         /// <summary>
         /// Check if directory is writable
@@ -68,6 +68,21 @@ namespace zcopy
                     pending.Enqueue(tmp[i]);
                 }
             }
+        }
+
+        /// <summary>
+        /// Truncate string to maxLength
+        /// see https://stackoverflow.com/a/2776689/9658535
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="maxLength"></param>
+        /// <param name="truncationSuffix"></param>
+        /// <returns></returns>
+        public static string? Truncate(this string? value, int maxLength, string truncationSuffix = "…")
+        {
+            return value?.Length > maxLength
+                ? value.Substring(0, maxLength) + truncationSuffix
+                : value;
         }
     }
 }

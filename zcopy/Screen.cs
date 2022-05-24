@@ -19,9 +19,8 @@ namespace zcopy
         /// <summary>
         /// File currently being scanned
         /// </summary>
-        private string screenScanningFile = "";
-
-        public string ScreenScanningFile
+        private string? screenScanningFile;
+        public string? ScreenScanningFile
         {
             get
             {
@@ -48,9 +47,9 @@ namespace zcopy
         /// <summary>
         /// File currently being copied
         /// </summary>
-        private string screenCopyFile = "";
+        private string? screenCopyFile;
 
-        public string ScreenCopyFile
+        public string? ScreenCopyFile
         {
             get
             {
@@ -96,8 +95,6 @@ namespace zcopy
 
         public TimeSpan GetElaspedTime => ExecTime.Elapsed;
 
-        private int OldFileNameSize = 0;
-
         /// <summary>
         /// Print copy status, do not print if verbose is on
         /// </summary>
@@ -108,21 +105,22 @@ namespace zcopy
         {
             Console.SetCursorPosition(0, 0);
 
-            string displayFiName = ScreenCopyFile;
+            string? displayCopyName = ScreenCopyFile.Truncate(Console.WindowWidth - 16);
+            string? displayScanName = ScreenScanningFile.Truncate(Console.WindowWidth - 16);
 
-            if (OldFileNameSize != 0 && OldFileNameSize > displayFiName.Length)
-            {
-                Console.Clear();
-            }
+            Console.Clear();
 
-            if (displayFiName.Length > Console.WindowWidth - 6)
-            {
-                displayFiName = displayFiName.Substring(0, Console.WindowWidth - 6);
-            }
-
-            ConsoleWriteLineWithColor($"file: {displayFiName}", ConsoleColor.Gray);
+            ConsoleWriteLineWithColor($"scanning: {displayScanName}", ConsoleColor.Gray);
+            ConsoleWriteLineWithColor($"copying: {displayCopyName}", ConsoleColor.Gray);
             if (ScreenPercent != null)
-                ConsoleWriteNumberWithSpColor("Progress: ", ScreenPercent, " %", ConsoleColor.White, ConsoleColor.Gray);
+            {
+                ConsoleWriteNumberWithSpColor("  Progress: ", ScreenPercent, " %", ConsoleColor.White, ConsoleColor.Gray);
+            }
+            else
+            {
+                ConsoleWriteWithColor("  Progress:", ConsoleColor.Gray);
+                ConsoleWriteLineWithColor(" Done", ConsoleColor.White);
+            }
 
             Console.WriteLine();
             ConsoleWriteNumberWithSpColor("Running: ", ExecTime.Elapsed.ToString("d\\.hh\\:mm\\:ss"), null, ConsoleColor.White, ConsoleColor.Gray);
@@ -130,8 +128,6 @@ namespace zcopy
             ConsoleWriteNumberWithSpColor("Skipped: ", Skipped, null, ConsoleColor.DarkGreen, ConsoleColor.Gray);
             ConsoleWriteNumberWithSpColor("Scanner Error: ", ScannerError, null, ConsoleColor.DarkRed, ConsoleColor.Gray);
             ConsoleWriteNumberWithSpColor("Copier Error: ", CopierError, null, ConsoleColor.DarkRed, ConsoleColor.Gray);
-
-            OldFileNameSize = displayFiName.Length;
         }
 
         private void ConsoleWriteNumberWithSpColor(string? header, object value, string? footer, ConsoleColor accent, ConsoleColor textColor = ConsoleColor.White)
