@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "zcopy": {
+      "commandName": "Project",
+      "commandLineArgs": "-in F:\\d_include.txt D:\\ F:\\D"
+    }
+  }
+}
