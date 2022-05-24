@@ -91,6 +91,7 @@ namespace zcopy
         public void Stop()
         {
             ExecTime.Stop();
+            Done = true;
         }
 
         public TimeSpan GetElaspedTime => ExecTime.Elapsed;

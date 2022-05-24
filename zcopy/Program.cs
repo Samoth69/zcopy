@@ -185,10 +185,10 @@ namespace zcopy
             //notify copier to stop main loop
             copier.Stop();
 
-            screen.Stop();
-
             copyThread.Join();
             WriteLineLog("Copy Thread exited");
+
+            screen.Stop();
 
             WriteLineLog($"ExecTime: {screen.GetElaspedTime}");
             WriteLineLog($"ScannerError: {screen.ScannerError}");
