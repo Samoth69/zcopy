@@ -16,25 +16,34 @@ namespace zcopy
 
         public delegate void DCopyCompleteCallback(FileCouple fi);
 
+        public delegate void DCopyEndedCallback();
+
         private DCopyProgressCallback copyProgressCallback;
         private DCopyErrorCallback copyErrorCallback;
         private DCopyCompleteCallback copyCompleteCallback;
+        private DCopyEndedCallback copyEndedCallback;
 
         private ConcurrentQueue<FilesToCopy> todo;
 
         private bool done = false;
 
-        public Copier(ConcurrentQueue<FilesToCopy> jobs, DCopyProgressCallback progressCallback, DCopyErrorCallback errorCallback, DCopyCompleteCallback completeCallback)
+        public Copier(
+            ConcurrentQueue<FilesToCopy> jobs, 
+            DCopyProgressCallback progressCallback, 
+            DCopyErrorCallback errorCallback, 
+            DCopyCompleteCallback completeCallback,
+            DCopyEndedCallback endedCallback)
         {
             todo = jobs;
             copyProgressCallback = progressCallback;
             copyErrorCallback = errorCallback;
             copyCompleteCallback = completeCallback;
+            copyEndedCallback = endedCallback;
         }
 
-        public async void Start()
+        public async Task Start()
         {
-            while (!done)
+            while (!done || !todo.IsEmpty)
             {
                 FilesToCopy? filesToCopy;
 
@@ -87,6 +96,7 @@ namespace zcopy
                 }
                 Thread.Sleep(1);
             }
+            copyEndedCallback.Invoke();
         }
 
         /// <summary>

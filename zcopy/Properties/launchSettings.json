@@ -3,6 +3,10 @@
     "zcopy": {
       "commandName": "Project",
       "commandLineArgs": "-in F:\\d_include.txt D:\\ F:\\D"
+    },
+    "Profil 1": {
+      "commandName": "Project",
+      "commandLineArgs": "E:\\TestZCopy\\src E:\\TestZCopy\\dest"
     }
   }
 }

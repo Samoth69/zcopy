@@ -1,6 +1,7 @@
 ﻿using Mono.Options;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Linq;
 
 namespace zcopy
 {
@@ -10,6 +11,8 @@ namespace zcopy
         private static byte verbose = 0;
 
         private static Screen screen = new();
+
+        private static Copier? copier;
 
         static int Main(string[] args)
         {
@@ -106,7 +109,7 @@ namespace zcopy
 
                             // if DoCopy fail for some reason, we mark errored has true
                             //errored = !DoCopy(srcPath, destPath, excludedFolders, includedFolders);
-                            StartThreads(srcPath, destPath, excludedFolders, includedFolders);
+                            Task.Run(() => StartThreads(srcPath, destPath, excludedFolders, includedFolders)).Wait();
                         }
                     }
                     else
@@ -159,36 +162,24 @@ namespace zcopy
             return true;
         }
 
-        private static void StartThreads(string src, string dest, ICollection<string> excludeFilter, ICollection<string> includeFilter)
+        private static async Task StartThreads(string src, string dest, ICollection<string> excludeFilter, ICollection<string> includeFilter)
         {
             Stopwatch watch = new();
             ConcurrentQueue<FilesToCopy> queue = new();
-            Scanner scanner = new(src, dest, includeFilter, excludeFilter, queue, ScannerErrorCallback, ScannerSkippedCallback);
-            Copier copier = new(queue, CopierProgressCallback, CopierErrorCallback, CopierCompleteCallback);
+            Scanner scanner = new(src, dest, includeFilter, excludeFilter, queue, ScannerErrorCallback, ScannerSkippedCallback, ScannerEnded);
+            copier = new(queue, CopierProgressCallback, CopierErrorCallback, CopierCompleteCallback, CopierEnded);
 
-            Thread scannerThread = new Thread(new ThreadStart(scanner.Start));
-            Thread copyThread = new Thread(new ThreadStart(copier.Start));
-            Thread screenThread = new Thread(new ThreadStart(screen.Start));
-
-            WriteLineLog("Starting Scanner thread");
-            scannerThread.Start();
-
-            WriteLineLog("Starting Copy thread");
-            copyThread.Start();
-
+            List<Task> tasks = new()
+            {
+                scanner.Start(),
+                copier.Start()
+            };
             if (verbose != 1)
-                screenThread.Start();
+            {
+                tasks.Add(screen.Start());
+            }
 
-            scannerThread.Join();
-            WriteLineLog("Scanner Thread exited");
-
-            //notify copier to stop main loop
-            copier.Stop();
-
-            copyThread.Join();
-            WriteLineLog("Copy Thread exited");
-
-            screen.Stop();
+            await Task.WhenAll(tasks);
 
             WriteLineLog($"ExecTime: {screen.GetElaspedTime}");
             WriteLineLog($"ScannerError: {screen.ScannerError}");
@@ -239,6 +230,23 @@ namespace zcopy
         }
 
         /// <summary>
+        /// should be called when the scanner has finished his work
+        /// should trigger the copier to end when finished
+        /// </summary>
+        private static void ScannerEnded()
+        {
+            copier!.Stop();
+        }
+
+        /// <summary>
+        /// should be triggered when we have finished copying files
+        /// </summary>
+        private static void CopierEnded()
+        {
+            screen.Stop();
+        }
+
+        /// <summary>
         /// Log message if verbose is on, do nothing otherwise
         /// </summary>
         /// <param name="text">text to log</param>
@@ -256,6 +264,6 @@ namespace zcopy
             {
                 Console.Write(text);
             }
-        }        
+        }
     }
 }

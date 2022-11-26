@@ -24,6 +24,11 @@ namespace zcopy
         public delegate void DScanSkippedCallback(string file);
 
         /// <summary>
+        /// callback when the scanner has finished
+        /// </summary>
+        public delegate void DScanFinished();
+
+        /// <summary>
         /// Will be called when an error happend
         /// </summary>
         private DScanErrorCallback scanErrorCallback;
@@ -32,6 +37,8 @@ namespace zcopy
         /// Will be called when a file has been skipped, check delegate for more details
         /// </summary>
         private DScanSkippedCallback scanSkippedCallback;
+
+        private DScanFinished scanFinishedCallback;
 
         /// <summary>
         /// Limit the number of entries in ConcurrentQueue
@@ -66,7 +73,8 @@ namespace zcopy
             IEnumerable<string> excludedFolders,
             ConcurrentQueue<FilesToCopy> todo,
             DScanErrorCallback scanErrorCallback,
-            DScanSkippedCallback scanSkippedCallback)
+            DScanSkippedCallback scanSkippedCallback,
+            DScanFinished scanFinishedCallback)
         {
             this.todo = todo;
             this.scanErrorCallback = scanErrorCallback;
@@ -75,9 +83,10 @@ namespace zcopy
             this.excludedFolders = excludedFolders;
             this.src = src;
             this.dest = dest;
+            this.scanFinishedCallback = scanFinishedCallback;
         }
 
-        public void Start()
+        public async Task Start()
         {
             EnqueuedFolder currentFolder = new(src);
             string currentDestFolder;
@@ -91,7 +100,7 @@ namespace zcopy
                 while (todo.Count > todoMaxBufferSize) Thread.Sleep(1);
 
                 currentFolder = pending.Dequeue();
-                currentDestFolder = Path.Combine(dest, currentFolder.Path.Remove(0, src.Length));
+                currentDestFolder = dest + currentFolder.Path.Remove(0, src.Length);
 
                 try
                 {
@@ -127,7 +136,7 @@ namespace zcopy
                                     FileInfo destFi = new(destFile);
                                     if (CompareSec(srcFi.LastWriteTimeUtc, destFi.LastWriteTimeUtc) && srcFi.Length == destFi.Length)
                                     {
-                                        Task.Run(() => scanSkippedCallback.Invoke(srcFile));
+                                        await Task.Run(() => scanSkippedCallback.Invoke(srcFile));
                                         continue;
                                     }
                                 }
@@ -137,7 +146,7 @@ namespace zcopy
                         }
                         catch (UnauthorizedAccessException ex)
                         {
-                            Task.Run(() => scanErrorCallback.Invoke(srcFile, ex.Message));
+                            await Task.Run(() => scanErrorCallback.Invoke(srcFile, ex.Message));
                         }
                     }
                     if (filesToCopy.FileCouples.Any())
@@ -145,7 +154,7 @@ namespace zcopy
                 }
                 catch (UnauthorizedAccessException ex)
                 {
-                    Task.Run(() => scanErrorCallback.Invoke(currentFolder.Path, ex.Message));
+                    await Task.Run(() => scanErrorCallback.Invoke(currentFolder.Path, ex.Message));
                 }
 
                 foreach (string folder in Directory.EnumerateDirectories(currentFolder.Path))
@@ -166,6 +175,7 @@ namespace zcopy
                     }
                 }
             }
+            scanFinishedCallback.Invoke();
         }
 
         public static bool CompareSec(DateTime dt1, DateTime dt2)

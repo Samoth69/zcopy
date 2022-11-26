@@ -77,7 +77,7 @@ namespace zcopy
 
         private bool Done = false;
 
-        public void Start()
+        public async Task Start()
         {
             ExecTime.Start();
 
